@@ -1,13 +1,14 @@
 # Zero-Trust Remote Maintenance for OT Environments
 
-A prototype demonstrating secure remote maintenance using OpenZiti's zero-trust networking. This solution enables service engineers to securely access industrial devices for diagnostics, firmware updates, and configuration without VPNs or exposed network ports.
+A prototype demonstrating secure remote maintenance of industrial devices using [OpenZiti](https://openziti.io)'s zero-trust networking. This solution enables service engineers to securely access OT devices for diagnostics, firmware updates, and configuration—**without VPNs or exposed network ports**.
 
-## 🎯 Project Goals
+## 🎯 Key Features
 
-- Implement identity-based, outbound-only connectivity for OT scenarios
-- Demonstrate secure remote command execution, file transfer, and port forwarding
-- Eliminate traditional VPN infrastructure and firewall modifications
-- Provide comprehensive security verification and performance benchmarking
+- **Identity-Based Access** - No passwords, only cryptographic identities
+- **Outbound-Only Connections** - Edge devices never accept incoming connections
+- **Service-Level Security** - Granular control over who can access what
+- **Zero Network Exposure** - No open ports, eliminates attack surface
+- **End-to-End Encryption** - All traffic encrypted by default
 
 ## 🏗️ Architecture
 
@@ -19,138 +20,105 @@ A prototype demonstrating secure remote maintenance using OpenZiti's zero-trust 
                                     │
                             ┌───────┴────────┐
                             │   Controller   │
-                            │   Edge Router  │
                             │   ZAC Console  │
                             └────────────────┘
 ```
 
-## 📁 Project Structure
+**Key Concepts:**
+- **Bind** - Edge device hosts services (ops.exec, ops.files, ops.forward)
+- **Dial** - Operator connects to services through zero-trust overlay
+- **No Open Ports** - All connections are outbound-only from edge device
 
-```
-.
-├── edge-agent/              # Edge device agent (binds services)
-│   ├── src/
-│   ├── config/
-│   └── Dockerfile
-├── operator-dashboard/      # Operator application (dials services)
-│   ├── src/
-│   ├── public/
-│   └── Dockerfile
-├── ziti-config/            # OpenZiti configuration files
-│   ├── identities/
-│   └── policies/
-├── scripts/                # Setup and utility scripts
-├── benchmarks/             # Performance test results
-├── docs/                   # Additional documentation
-├── docker-compose.yaml     # Lab environment setup
-└── README.md
-```
+## 🔧 Services Implemented
+
+| Service | Purpose | Status |
+|---------|---------|--------|
+| `ops.exec` | Remote command execution with allowlist | 🚧 Planned |
+| `ops.files` | Secure bidirectional file transfer | 🚧 Planned |
+| `ops.forward` | Port forwarding to access local UIs | 🚧 Planned |
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-
 - Docker & Docker Compose
 - Git
-- (Optional) Hardware: Siemens IPC, SCALANCE router
 
-### Setup
+### Get Started in 3 Steps
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/openziti-remote-maintenance.git
+   git clone https://github.com/jutper01/openziti-remote-maintenance.git
    cd openziti-remote-maintenance
    ```
 
-2. **Start OpenZiti infrastructure**
+2. **Configure environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env if needed (defaults work for local testing)
+   ```
+
+3. **Start the environment**
    ```bash
    docker-compose up -d
    ```
 
-3. **Initialize Ziti network**
-   ```bash
-   ./scripts/setup-ziti.sh
-   ```
+4. **Access ZAC (Admin Console)**
+   - Open: https://localhost:8443
+   - Login: `admin` / `admin` (or your `.env` password)
 
-4. **Start the edge agent**
-   ```bash
-   cd edge-agent
-   # Setup instructions TBD
-   ```
+📖 **For detailed setup instructions, see [QUICKSTART.md](QUICKSTART.md)**
 
-5. **Start the operator dashboard**
-   ```bash
-   cd operator-dashboard
-   # Setup instructions TBD
-   ```
+## � Project Structure
 
-## 🔧 Services
+```
+.
+├── docker-compose.yaml     # Docker environment setup
+├── .env.example           # Environment configuration template
+├── QUICKSTART.md          # Detailed setup guide
+├── edge-agent/            # Edge device agent (binds services)
+├── operator-dashboard/    # Operator UI (dials services)
+├── ziti-config/          # OpenZiti configuration & identities
+├── scripts/              # Utility scripts
+├── benchmarks/           # Performance test results
+└── docs/                 # Additional documentation
+    └── REQUIREMENTS.md   # Detailed project requirements
+```
 
-### ops.exec - Remote Command Execution
-Execute allowlisted commands on edge devices for diagnostics and troubleshooting.
+## � Project Status
 
-### ops.files - Secure File Transfer
-Transfer files bidirectionally with integrity verification and chunked streaming.
+**Current Phase:** Docker Environment Setup ✅
 
-### ops.forward - Port Forwarding
-Access local web UIs and services through the zero-trust overlay.
-
-## 📊 Benchmarking
-
-Performance metrics include:
-- Connection setup time
-- Command execution latency (p50/p95)
-- File transfer throughput
-- Port forwarding latency
-
-Results and analysis available in `/benchmarks`
-
-## 🔒 Security Verification
-
-- **Port Scanning:** Nmap scans showing no exposed ports
-- **Traffic Analysis:** Wireshark captures verifying encryption
-- **Identity Verification:** OpenZiti's identity-based access control
-- **Audit Logging:** Complete session and command logging
+- [x] Docker Compose environment with OpenZiti controller
+- [x] ZAC (Admin Console) web interface
+- [x] Edge device and operator dashboard containers
+- [ ] OpenZiti identities and service definitions
+- [ ] Edge agent implementation
+- [ ] Operator dashboard implementation
+- [ ] Security verification & benchmarking
 
 ## 📖 Documentation
 
-- [Setup Guide](docs/SETUP.md)
-- [Architecture Details](docs/ARCHITECTURE.md)
-- [Security Model](docs/SECURITY.md)
-- [API Reference](docs/API.md)
-- [Hardware Integration](docs/HARDWARE.md)
+- **[QUICKSTART.md](QUICKSTART.md)** - Step-by-step setup guide
+- **[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)** - Detailed project requirements and design
+- **[OpenZiti Documentation](https://openziti.io/)** - Official OpenZiti docs
 
-## 🎬 Demo
+## 🔒 Security Features
 
-See [Demo Script](docs/DEMO.md) for a complete walkthrough.
+- **No Open Ports** - Edge devices maintain only outbound connections
+- **Identity-Based** - Cryptographic identities, no shared secrets
+- **End-to-End Encryption** - All traffic encrypted in transit
+- **Service Segmentation** - Granular access control per service
+- **Audit Logging** - Complete activity tracking
 
-Video demonstration: [Link TBD]
+## 🧪 Verification & Testing (Planned)
 
-## 🛠️ Technology Stack
-
-- **OpenZiti:** Zero-trust overlay network
-- **Agent/Operator:** Python or Node.js (TBD)
-- **Dashboard:** Web-based UI (framework TBD)
-- **Containers:** Docker & Docker Compose
-
-## 🚧 Project Status
-
-**Current Phase:** Initial Setup
-
-- [x] Project requirements defined
-- [x] Project structure created
-- [ ] Docker Compose environment
-- [ ] Edge agent implementation
-- [ ] Operator dashboard implementation
-- [ ] Service policies configuration
-- [ ] Benchmarking suite
-- [ ] Security verification
-- [ ] Documentation
-- [ ] Demo video
+- **Security:** Nmap port scans, Wireshark packet analysis
+- **Performance:** Latency (p50/p95/p99), throughput, connection time
+- **Operational:** Setup complexity vs traditional VPN
 
 ## 🤝 Contributing
 
-This is a prototype/research project. Contributions and suggestions are welcome!
+This is a research/prototype project. Issues and suggestions are welcome!
 
 ## 📝 License
 
@@ -158,9 +126,9 @@ This is a prototype/research project. Contributions and suggestions are welcome!
 
 ## 🔗 References
 
-- [OpenZiti](https://github.com/openziti/ziti)
+- [OpenZiti GitHub](https://github.com/openziti/ziti)
 - [OpenZiti Documentation](https://openziti.io/)
-- [Project Requirements](project-requirements.md)
+- [Zero Trust Architecture](https://www.nist.gov/publications/zero-trust-architecture)
 
 ## 💡 Future Enhancements
 

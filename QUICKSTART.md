@@ -79,14 +79,15 @@ You should see the "Default Admin" identity.
 
 ✅ **If ZAC is accessible and CLI commands work, your environment is ready!**
 
-## Next Steps
+## What's Next?
 
-Now that the environment is running, proceed to:
-1. **Create Identities** - For edge-device and operator
-2. **Define Services** - ops.exec, ops.files, ops.forward
-3. **Configure Policies** - Bind and dial permissions
-4. **Implement Agent** - Python/Node.js SDK on edge-device
-5. **Build Dashboard** - Web UI for operators
+This prototype is currently in early development. The following components are planned:
+- OpenZiti identities and service definitions (ops.exec, ops.files, ops.forward)
+- Edge agent implementation to bind services
+- Operator dashboard UI to dial services
+- Security verification and performance benchmarking
+
+For detailed project requirements and architecture, see **[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)**
 
 ## Useful Commands
 
