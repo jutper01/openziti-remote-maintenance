@@ -57,6 +57,7 @@ ziti-config/controller-data/
 ziti-config/router-data/
 
 # Docker
+.env
 .env.local
 docker-compose.override.yml
 
