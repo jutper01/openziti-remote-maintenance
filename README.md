@@ -68,7 +68,7 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 
 📖 **For detailed setup instructions, see [QUICKSTART.md](QUICKSTART.md)**
 
-## � Project Structure
+## 📁 Project Structure
 
 ```
 .
@@ -84,7 +84,7 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
     └── REQUIREMENTS.md   # Detailed project requirements
 ```
 
-## � Project Status
+## ✅ Project Status
 
 **Current Phase:** Docker Environment Setup ✅
 
@@ -94,6 +94,7 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 - [ ] OpenZiti identities and service definitions
 - [ ] Edge agent implementation
 - [ ] Operator dashboard implementation
+- [ ] Hardware integration (Siemens PLC & HMI deployment)
 - [ ] Security verification & benchmarking
 
 ## 📖 Documentation
@@ -120,14 +121,10 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 
 This is a research/prototype project. Issues and suggestions are welcome!
 
-## 📝 License
-
-[License TBD]
-
 ## 🔗 References
 
 - [OpenZiti GitHub](https://github.com/openziti/ziti)
-- [OpenZiti Documentation](https://openziti.io/)
+- [OpenZiti Documentation](https://netfoundry.io/docs/openziti/learn/introduction/)
 - [Zero Trust Architecture](https://www.nist.gov/publications/zero-trust-architecture)
 
 ## 💡 Future Enhancements
@@ -136,4 +133,3 @@ This is a research/prototype project. Issues and suggestions are welcome!
 - Integrate Grafana/Prometheus monitoring
 - Multi-device management dashboard
 - Role-based access control
-- Hardware integration guide

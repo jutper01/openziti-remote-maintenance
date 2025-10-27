@@ -77,17 +77,64 @@ ziti edge list identities
 
 You should see the "Default Admin" identity.
 
-✅ **If ZAC is accessible and CLI commands work, your environment is ready!**
+✅ **If ZAC is accessible and CLI commands work, your environment is ready for setup!**
+
+## Step 5: Create Identities and Services
+
+Now that the infrastructure is running, create the OpenZiti identities, services, and policies:
+
+```bash
+# Enter the controller container
+docker exec -it openziti-ziti-controller-1 bash
+
+# Login to the controller
+zitiLogin
+
+# Run the setup script
+/scripts/setup-ziti.sh
+```
+
+The script will:
+1. **Clean up** - Remove any old enrollment files from previous runs
+2. **Create identities** - `edge-device` (type: device) and `operator` (type: user)
+3. **Create services** - `ops.exec`, `ops.files`, `ops.forward`
+4. **Create policies** - Bind policy (edge-device can host services) and Dial policy (operator can access services)
+5. **Enroll identities** - Generate certificate-based identity files
+
+### Verify in ZAC
+
+After running the script, refresh ZAC (https://localhost:8443) and verify:
+
+- **Identities** → Should show `edge-device` and `operator`
+- **Services** → Should show `ops.exec`, `ops.files`, `ops.forward`
+- **Service Policies** → Should show `edge-device-bind` and `operator-dial`
+
+### Verify via CLI
+
+Or verify from the command line:
+
+```bash
+# List identities (should show edge-device and operator)
+ziti edge list identities
+
+# List services (should show ops.exec, ops.files, ops.forward)
+ziti edge list services
+
+# List policies (should show edge-device-bind and operator-dial)
+ziti edge list service-policies
+```
+
+✅ **Identity and service configuration complete!**
 
 ## What's Next?
 
-This prototype is currently in early development. The following components are planned:
-- OpenZiti identities and service definitions (ops.exec, ops.files, ops.forward)
-- Edge agent implementation to bind services
-- Operator dashboard UI to dial services
-- Security verification and performance benchmarking
+With identities and services configured, the next steps are:
+- **Edge Agent Implementation** - Code that binds the three services on the edge-device container
+- **Operator Dashboard** - Web UI that dials services for remote maintenance
+- **Security Verification** - Nmap scans, Wireshark analysis
+- **Performance Benchmarking** - Latency, throughput measurements
 
-For detailed project requirements and architecture, see **[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)**
+For detailed technical requirements and design, see **[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)**
 
 ## Useful Commands
 
@@ -118,7 +165,7 @@ docker exec -it openziti-ziti-controller-1 bash
 ```bash
 # Login to controller
 docker exec -it openziti-ziti-controller-1 bash
-zitiLogin"
+zitiLogin
 
 # List identities
 ziti edge list identities
@@ -146,6 +193,25 @@ ziti edge list service-policies
    ```bash
    docker-compose down -v && docker-compose up -d
    ```
+
+### Controller exits with error after `docker compose down` (without `-v`)
+The controller fails because it finds inconsistent data from a previous run. During development, always use the `-v` flag to clean up volumes:
+
+```bash
+# Correct way to restart during development
+docker-compose down -v
+docker-compose up -d
+
+# Then re-run setup script
+docker exec -it openziti-ziti-controller-1 bash
+zitiLogin
+/scripts/setup-ziti.sh
+```
+
+Alternatively, use `restart` instead of `down/up` to keep data:
+```bash
+docker-compose restart ziti-controller
+```
 
 ### Can't access ZAC at https://localhost:8443
 1. Verify controller is healthy:

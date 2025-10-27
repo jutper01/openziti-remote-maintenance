@@ -27,6 +27,8 @@ services:
           - ziti-edge-controller
     volumes:
       - ziti-fs:/persistent
+      - ./scripts:/scripts
+      - ./ziti-config:/ziti-config
     entrypoint:
       - "/var/openziti/scripts/run-controller.sh"
 

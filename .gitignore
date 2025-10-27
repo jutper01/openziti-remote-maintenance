@@ -47,12 +47,21 @@ yarn-error.log*
 package-lock.json
 yarn.lock
 
-# OpenZiti
+# Environment
+.env
+.env.local
+
+# OpenZiti secrets and certificates
 *.jwt
 *.cert
 *.key
 *.json.backup
+
+# OpenZiti identity files (contain private keys)
+ziti-config/*.json
 ziti-config/identities/*.json
+
+# OpenZiti data directories
 ziti-config/controller-data/
 ziti-config/router-data/
 
