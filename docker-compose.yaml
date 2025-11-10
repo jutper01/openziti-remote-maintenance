@@ -16,6 +16,7 @@ services:
       - ZITI_CTRL_EDGE_ADVERTISED_ADDRESS=${ZITI_CTRL_EDGE_ADVERTISED_ADDRESS:-ziti-edge-controller}
       - ZITI_CTRL_EDGE_ADVERTISED_PORT=${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}
       - ZITI_CTRL_EDGE_IP_OVERRIDE=${ZITI_CTRL_EDGE_IP_OVERRIDE:-127.0.0.1}
+      - ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_EDGE_ADVERTISED_ADDRESS:-ziti-edge-controller}
       - ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT:-6262}
       - ZITI_EDGE_IDENTITY_ENROLLMENT_DURATION=${ZITI_EDGE_IDENTITY_ENROLLMENT_DURATION}
       - ZITI_ROUTER_ENROLLMENT_DURATION=${ZITI_ROUTER_ENROLLMENT_DURATION}
@@ -54,9 +55,37 @@ services:
       - ziti-fs:/persistent
     networks:
       - ziti-network
+      
+  ziti-router:
+    image: "${ZITI_IMAGE}:${ZITI_VERSION}"
+    container_name: ziti-router
+    hostname: ziti-router
+    env_file:
+      - ./.env
+    depends_on:
+      ziti-controller:
+        condition: service_healthy
+    ports:
+      - ${ZITI_INTERFACE:-0.0.0.0}:${ZITI_ROUTER_PORT:-3022}:${ZITI_ROUTER_PORT:-3022}
+    networks:
+      - ziti-network
+    volumes:
+      - ziti-fs:/persistent
+    environment:
+      - ZITI_CTRL_ADVERTISED_ADDRESS=${ZITI_CTRL_EDGE_ADVERTISED_ADDRESS:-ziti-edge-controller}
+      - ZITI_CTRL_ADVERTISED_PORT=${ZITI_CTRL_ADVERTISED_PORT:-6262}
+      - ZITI_CTRL_EDGE_ADVERTISED_ADDRESS=${ZITI_CTRL_EDGE_ADVERTISED_ADDRESS:-ziti-edge-controller}
+      - ZITI_CTRL_EDGE_ADVERTISED_PORT=${ZITI_CTRL_EDGE_ADVERTISED_PORT:-1280}
+      - ZITI_ROUTER_NAME=${ZITI_ROUTER_NAME:-ziti-router}
+      - ZITI_ROUTER_ADVERTISED_ADDRESS=${ZITI_ROUTER_ADVERTISED_ADDRESS:-ziti-router}
+      - ZITI_ROUTER_PORT=${ZITI_ROUTER_PORT:-3022}
+      - ZITI_ROUTER_ROLES=public
+    entrypoint: /bin/bash
+    command: "/var/openziti/scripts/run-router.sh edge"
+    restart: unless-stopped
 
   edge-device:
-    image: alpine:latest
+    image: python:3.12-slim
     container_name: edge-device
     hostname: edge-device
     depends_on:
@@ -65,12 +94,13 @@ services:
     volumes:
       - ./edge-agent:/app
       - ./ziti-config:/ziti-config
+      - ./scripts:/scripts
     networks:
       - ziti-network
     command: tail -f /dev/null
 
   operator-dashboard:
-    image: alpine:latest
+    image: python:3.12-slim
     container_name: operator-dashboard
     hostname: operator-dashboard
     depends_on:
@@ -81,6 +111,7 @@ services:
     volumes:
       - ./operator-dashboard:/app
       - ./ziti-config:/ziti-config
+      - ./scripts:/scripts
     networks:
       - ziti-network
     command: tail -f /dev/null

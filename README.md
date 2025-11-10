@@ -33,9 +33,17 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 
 | Service | Purpose | Status |
 |---------|---------|--------|
-| `ops.exec` | Remote command execution with allowlist | 🚧 Planned |
+| `ops.exec` | Remote command execution with allowlist | 🏋️‍♂️ MVP in Progress |
 | `ops.files` | Secure bidirectional file transfer | 🚧 Planned |
 | `ops.forward` | Port forwarding to access local UIs | 🚧 Planned |
+
+## 💻 Technology Stack
+
+- **Programming Language**: Python 3.8+
+- **Zero-Trust SDK**: [openziti-python](https://github.com/openziti/ziti-sdk-py)
+- **Controller**: OpenZiti quickstart (Docker image)
+- **CLI Framework**: Click (for operator dashboard)
+- **Deployment**: Docker Compose (development/testing)
 
 ## 🚀 Quick Start
 
@@ -72,11 +80,11 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 
 ```
 .
-├── docker-compose.yaml     # Docker environment setup
-├── .env.example           # Environment configuration template
-├── QUICKSTART.md          # Detailed setup guide
-├── edge-agent/            # Edge device agent (binds services)
-├── operator-dashboard/    # Operator UI (dials services)
+├── docker-compose.yaml   # Docker environment setup
+├── .env.example          # Environment configuration template
+├── QUICKSTART.md         # Detailed setup guide
+├── edge-agent/           # Edge device agent (binds services)
+├── operator-dashboard/   # Operator UI (dials services)
 ├── ziti-config/          # OpenZiti configuration & identities
 ├── scripts/              # Utility scripts
 ├── benchmarks/           # Performance test results
@@ -86,15 +94,16 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 
 ## ✅ Project Status
 
-**Current Phase:** Docker Environment Setup ✅
+**Current Phase:** MVP Implementation ✅
 
 - [x] Docker Compose environment with OpenZiti controller
 - [x] ZAC (Admin Console) web interface
 - [x] Edge device and operator dashboard containers
-- [ ] OpenZiti identities and service definitions
-- [ ] Edge agent implementation
-- [ ] Operator dashboard implementation
-- [ ] Hardware integration (Siemens PLC & HMI deployment)
+- [x] OpenZiti identities, service & router definitions
+- [ ] Edge agent implementation (ops.exec MVP)
+- [ ] Operator dashboard CLI implementation (exec command)
+- [ ] Additional services (ops.files, ops.forward)
+- [ ] Hardware integration (Siemens PLC & HMI deployment if time permits)
 - [ ] Security verification & benchmarking
 
 ## 📖 Documentation

@@ -10,7 +10,7 @@ This guide walks you through setting up a minimal OpenZiti environment for the r
 ## Step 1: Start the Environment
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 This will start:
@@ -18,6 +18,7 @@ This will start:
 - **ziti-console** - ZAC web UI for administration
 - **edge-device** - Simulated OT device container (placeholder for agent)
 - **operator-dashboard** - Maintenance UI container (placeholder for dashboard)
+- **ziti-router** - OpenZiti edge router (data-plane)
 
 It will also create:
 - `ziti-network` - Docker bridge network for container communication
@@ -26,16 +27,17 @@ It will also create:
 ## Step 2: Verify Services are Running
 
 ```bash
-docker-compose ps
+docker compose ps
 ```
 
-You should see all 4 services with "Up" status:
+You should see all services with "Up" status:
 ```
 NAME                 STATUS
-ziti-controller      Up (healthy)
-ziti-console         Up
 edge-device          Up
+ziti-controller      Up (healthy)
 operator-dashboard   Up
+ziti-console         Up
+ziti-router          Up
 ```
 
 ⏱️ **Wait 30-60 seconds** for the controller to fully initialize on first start.
@@ -50,13 +52,7 @@ Open your browser to: **https://localhost:8443**
 
 ⚠️ **Certificate Warning:** You'll see a security warning about a self-signed certificate. This is expected for local development. Click "Advanced" → "Proceed to localhost (unsafe)"
 
-### What You'll See in ZAC
-
-- **Dashboard** - Overview (currently empty - no services yet)
-- **Identities** - Only "Default Admin" exists currently
-- **Services** - Empty (we'll create ops.exec, ops.files, ops.forward later)
-- **Edge Routers** - Empty (controller has built-in routing for our simple setup)
-- **Policies** - Default policies only
+You should be greeted by the ZAC dashboard.
 
 ## Step 4: Test the Controller CLI
 
@@ -69,14 +65,6 @@ zitiLogin
 
 You should see: `Token: <token-value>` and `Saving identity 'default' to...`
 
-### List Identities
-
-```bash
-ziti edge list identities
-```
-
-You should see the "Default Admin" identity.
-
 ✅ **If ZAC is accessible and CLI commands work, your environment is ready for setup!**
 
 ## Step 5: Create Identities and Services
@@ -84,7 +72,7 @@ You should see the "Default Admin" identity.
 Now that the infrastructure is running, create the OpenZiti identities, services, and policies:
 
 ```bash
-# Enter the controller container
+# If not already inside the controller container, run:
 docker exec -it openziti-ziti-controller-1 bash
 
 # Login to the controller
@@ -95,11 +83,12 @@ zitiLogin
 ```
 
 The script will:
-1. **Clean up** - Remove any old enrollment files from previous runs
+1. **Clean up** - Remove any old configurations from previous runs
 2. **Create identities** - `edge-device` (type: device) and `operator` (type: user)
 3. **Create services** - `ops.exec`, `ops.files`, `ops.forward`
 4. **Create policies** - Bind policy (edge-device can host services) and Dial policy (operator can access services)
-5. **Enroll identities** - Generate certificate-based identity files
+5. **Create service edge router policy** - Assign all edge routers to all services
+6. **Enroll identities** - Generate certificate-based identity files
 
 ### Verify in ZAC
 
@@ -114,7 +103,7 @@ After running the script, refresh ZAC (https://localhost:8443) and verify:
 Or verify from the command line:
 
 ```bash
-# List identities (should show edge-device and operator)
+# List identities (should show Default Admin, ziti-router (online), edge-device and operator)
 ziti edge list identities
 
 # List services (should show ops.exec, ops.files, ops.forward)
@@ -122,6 +111,9 @@ ziti edge list services
 
 # List policies (should show edge-device-bind and operator-dial)
 ziti edge list service-policies
+
+# List service edge router policies (should show all edge routers assigned to all services)
+ziti edge list service-edge-router-policies
 ```
 
 ✅ **Identity and service configuration complete!**
@@ -141,30 +133,30 @@ For detailed technical requirements and design, see **[docs/REQUIREMENTS.md](doc
 ### Container Management
 ```bash
 # View all logs
-docker-compose logs -f
+docker compose logs -f
 
 # View specific service logs
-docker-compose logs -f ziti-controller
-docker-compose logs -f ziti-console
+docker compose logs -f ziti-controller
+docker compose logs -f ziti-console
 
 # Stop everything
-docker-compose down
+docker compose down
 
 # Stop and remove volumes (complete reset - loses all data!)
-docker-compose down -v
+docker compose down -v
 
 # Restart a specific service
-docker-compose restart ziti-controller
+docker compose restart ziti-controller
 
 # Execute commands in a container
-docker-compose exec edge-device sh
-docker exec -it openziti-ziti-controller-1 bash
+docker compose exec edge-device sh
+docker compose exec ziti-controller bash
 ```
 
 ### OpenZiti CLI Commands
 ```bash
-# Login to controller
-docker exec -it openziti-ziti-controller-1 bash
+# Login to controller (from host)
+docker compose exec ziti-controller bash
 zitiLogin
 
 # List identities
@@ -175,24 +167,10 @@ ziti edge list services
 
 # List policies
 ziti edge list service-policies
+
+# List service edge router policies
+ziti edge list service-edge-router-policies
 ```
-
-## Troubleshooting
-
-### Controller won't start
-1. Check if ports are already in use:
-   ```bash
-   lsof -i :1280
-   lsof -i :6262
-   ```
-2. Check logs for errors:
-   ```bash
-   docker-compose logs ziti-controller
-   ```
-3. Try a fresh start (⚠️ this deletes all data):
-   ```bash
-   docker-compose down -v && docker-compose up -d
-   ```
 
 ### Controller exits with error after `docker compose down` (without `-v`)
 The controller fails because it finds inconsistent data from a previous run. During development, always use the `-v` flag to clean up volumes:
@@ -212,35 +190,6 @@ Alternatively, use `restart` instead of `down/up` to keep data:
 ```bash
 docker-compose restart ziti-controller
 ```
-
-### Can't access ZAC at https://localhost:8443
-1. Verify controller is healthy:
-   ```bash
-   docker-compose ps
-   ```
-   Look for "Up (healthy)" status on ziti-controller
-
-2. Check ZAC logs:
-   ```bash
-   docker-compose logs ziti-console
-   ```
-
-3. Test if port is accessible:
-   ```bash
-   curl -k https://localhost:8443
-   ```
-
-4. Wait longer - controller takes 30-60 seconds to fully initialize on first start
-
-5. Verify ZAC has access to certificates:
-   ```bash
-   docker exec openziti-ziti-console-1 ls -la /persistent/pki/
-   ```
-
-### Login to ZAC fails
-- Check your password in `.env` file
-- Default is `admin` / `admin`
-- If you changed `ZITI_PWD`, use that password
 
 ## Environment Details
 

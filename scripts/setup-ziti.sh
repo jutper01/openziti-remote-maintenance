@@ -13,8 +13,16 @@ echo "OpenZiti Identity & Service Setup"
 echo "=================================="
 echo ""
 
-# Clean up old enrollment files from previous runs
-echo "🧹 Cleaning up old enrollment files..."
+# Clean up old enrollment files, identities and service policies from previous runs
+echo "🧹 Cleaning up old enrollment files, identities and service policies..."
+ziti edge delete identity "edge-device" || true
+ziti edge delete identity "operator" || true
+ziti edge delete service "ops.exec" || true
+ziti edge delete service "ops.files" || true
+ziti edge delete service "ops.forward" || true
+ziti edge delete service-policy "edge-device-bind" || true
+ziti edge delete service-policy "operator-dial" || true
+ziti edge delete service-edge-router-policy "all-services-all-routers" || true
 rm -f ${CONFIG_DIR}/edge-device.jwt ${CONFIG_DIR}/edge-device.json
 rm -f ${CONFIG_DIR}/operator.jwt ${CONFIG_DIR}/operator.json
 echo "✅ Cleanup complete"
@@ -74,6 +82,15 @@ ziti edge create service-policy "operator-dial" Dial \
 echo "✅ operator-dial created"
 
 echo ""
+
+# Service Edge Router Policy: assign all edge routers to all services
+echo "Creating Service Edge Router Policy 'all-services-all-routers'..."
+ziti edge create service-edge-router-policy "all-services-all-routers" \
+  --service-roles '#all' \
+  --edge-router-roles '#all'
+echo "✅ all-services-all-routers created"
+
+echo ""
 echo "📋 Step 4: Enrolling Identities"
 echo "--------------------------------"
 
@@ -109,6 +126,7 @@ echo "    - ops.forward"
 echo "  Policies:"
 echo "    - edge-device-bind (Bind)"
 echo "    - operator-dial (Dial)"
+echo "    - all-services-all-routers (Service Edge Router Policy)"
 echo ""
 echo "⚠️  SECURITY NOTE:"
 echo "  The .json files contain private keys and should be protected."
@@ -118,4 +136,5 @@ echo "🔍 Verify in ZAC: https://localhost:8443 or via CLI:"
 echo "  ziti edge list identities"
 echo "  ziti edge list services"
 echo "  ziti edge list service-policies"
+echo "  ziti edge list service-edge-router-policies"
 echo ""
