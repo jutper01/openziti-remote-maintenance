@@ -28,7 +28,7 @@ services:
           - ziti-edge-controller
     volumes:
       - ziti-fs:/persistent
-      - ./scripts:/scripts
+      - ./scripts:/var/local/scripts
       - ./ziti-config:/ziti-config
     entrypoint:
       - "/var/openziti/scripts/run-controller.sh"
@@ -94,7 +94,7 @@ services:
     volumes:
       - ./edge-agent:/app
       - ./ziti-config:/ziti-config
-      - ./scripts:/scripts
+      - ./scripts:/var/local/scripts
     networks:
       - ziti-network
     command: tail -f /dev/null
@@ -111,7 +111,7 @@ services:
     volumes:
       - ./operator-dashboard:/app
       - ./ziti-config:/ziti-config
-      - ./scripts:/scripts
+      - ./scripts:/var/local/scripts
     networks:
       - ziti-network
     command: tail -f /dev/null

@@ -3,6 +3,8 @@
 # Run this INSIDE the controller container after: 
 # docker exec -it openziti-ziti-controller-1 bash
 # zitiLogin
+#
+# NOTE: This script is mounted at /var/local/scripts/setup-ziti.sh in the controller container
 
 set -euo pipefail
 
@@ -23,6 +25,7 @@ ziti edge delete service "ops.forward" || true
 ziti edge delete service-policy "edge-device-bind" || true
 ziti edge delete service-policy "operator-dial" || true
 ziti edge delete service-edge-router-policy "all-services-all-routers" || true
+ziti edge delete edge-router-policy "all-identities-all-routers" || true
 rm -f ${CONFIG_DIR}/edge-device.jwt ${CONFIG_DIR}/edge-device.json
 rm -f ${CONFIG_DIR}/operator.jwt ${CONFIG_DIR}/operator.json
 echo "✅ Cleanup complete"
@@ -91,6 +94,15 @@ ziti edge create service-edge-router-policy "all-services-all-routers" \
 echo "✅ all-services-all-routers created"
 
 echo ""
+
+# Edge Router Policy: assign all edge routers to all identities
+echo "Creating Edge Router Policy 'all-identities-all-routers' (identities -> routers)..."
+ziti edge create edge-router-policy "all-identities-all-routers" \
+  --identity-roles '#all' \
+  --edge-router-roles '#all'
+echo "✅ all-identities-all-routers created"
+
+echo ""
 echo "📋 Step 4: Enrolling Identities"
 echo "--------------------------------"
 
@@ -127,6 +139,7 @@ echo "  Policies:"
 echo "    - edge-device-bind (Bind)"
 echo "    - operator-dial (Dial)"
 echo "    - all-services-all-routers (Service Edge Router Policy)"
+echo "    - all-identities-all-routers (Edge Router Policy)"
 echo ""
 echo "⚠️  SECURITY NOTE:"
 echo "  The .json files contain private keys and should be protected."
@@ -136,5 +149,5 @@ echo "🔍 Verify in ZAC: https://localhost:8443 or via CLI:"
 echo "  ziti edge list identities"
 echo "  ziti edge list services"
 echo "  ziti edge list service-policies"
-echo "  ziti edge list service-edge-router-policies"
+echo "  ziti edge list edge-router-policies"
 echo ""

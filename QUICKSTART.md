@@ -79,7 +79,7 @@ docker exec -it openziti-ziti-controller-1 bash
 zitiLogin
 
 # Run the setup script
-/scripts/setup-ziti.sh
+/var/local/scripts/setup-ziti.sh
 ```
 
 The script will:

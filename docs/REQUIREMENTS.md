@@ -93,7 +93,7 @@ Industrial service engineers need secure remote access to OT devices (PLCs, HMIs
 #### Docker Lab vs Real Hardware
 **Prototype Phase (Current):**
 - Docker Compose for quick iteration
-- Alpine Linux containers simulate OT devices
+- Python 3.12 slim containers simulate OT devices
 - All components on single host for development
 
 **Production Deployment (Future):**
@@ -153,8 +153,8 @@ Industrial service engineers need secure remote access to OT devices (PLCs, HMIs
 |-----------|-----------|-----------|
 | Controller | OpenZiti quickstart (Docker) | Official image, includes routing |
 | Admin UI | ZAC (Ziti Admin Console) | Web-based management, built-in |
-| Edge Agent | Python or Node.js + OpenZiti SDK | TBD based on SDK evaluation |
-| Operator Dashboard | Python or Node.js + Web UI | TBD - CLI first, then web interface |
+| Edge Agent | Python 3.12 slim | Lightweight, good SDK support |
+| Operator Dashboard | Python 3.12 slim + Web UI | Consistent stack, good SDK support |
 | Infrastructure | Docker Compose | Fast iteration, easy cleanup |
 
 ### Agent Implementation (Planned)
