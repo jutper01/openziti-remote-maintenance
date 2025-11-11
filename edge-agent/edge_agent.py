@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+import atexit
 from typing import List
 
 # Third-party
@@ -169,7 +170,30 @@ def main():
     
     # Configure ziti binding: redirect OS listen on BIND_ADDR:BIND_PORT to Ziti service SERVICE_NAME
     binding_cfg = {"ztx": IDENTITY_PATH, "service": SERVICE_NAME}
-    openziti.monkeypatch(bindings={(BIND_ADDR, BIND_PORT): binding_cfg})
+    patcher = None
+    try:
+        # Keep a handle to the patcher if available so we can explicitly unpatch on shutdown
+        patcher = openziti.monkeypatch(bindings={(BIND_ADDR, BIND_PORT): binding_cfg})
+    except Exception:
+        # Some SDK versions don't return a patcher; proceed regardless
+        openziti.monkeypatch(bindings={(BIND_ADDR, BIND_PORT): binding_cfg})
+
+    # Best-effort cleanup at process exit as a safety net
+    def _cleanup_on_exit():
+        try:
+            log("cleaning up ziti bindings...")
+            if patcher and hasattr(patcher, "close"):
+                patcher.close()
+        except Exception:
+            pass
+        try:
+            # If the SDK exposes an unmonkeypatch/reset, call it; ignore if not present
+            if hasattr(openziti, "unmonkeypatch"):
+                openziti.unmonkeypatch()
+        except Exception:
+            pass
+
+    atexit.register(_cleanup_on_exit)
 
     with ThreadedTCPServer((BIND_ADDR, BIND_PORT), ExecRequestHandler) as srv:
         log(
@@ -187,7 +211,25 @@ def main():
         # Clean shutdown
         log("stopping server...")
         srv.shutdown()
+        # Ensure the underlying listening socket is closed
+        try:
+            srv.server_close()
+        except Exception:
+            pass
         server_thread.join(timeout=2)
+        
+        # Explicitly unpatch/cleanup Ziti bindings to drop the terminator
+        try:
+            if patcher and hasattr(patcher, "close"):
+                patcher.close()
+        except Exception:
+            pass
+        try:
+            if hasattr(openziti, "unmonkeypatch"):
+                openziti.unmonkeypatch()
+        except Exception:
+            pass
+
         log("exited cleanly")
         sys.exit(0)
 
