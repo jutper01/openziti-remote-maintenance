@@ -11,7 +11,7 @@ import atexit
 from typing import List
 
 # Third-party
-import openziti
+import openziti # type: ignore
 
 # Configuration
 IDENTITY_PATH = os.environ.get("ZITI_EDGE_IDENTITY", "/ziti-config/edge-device.json")
@@ -21,7 +21,7 @@ BIND_PORT = int(os.environ.get("OPS_EXEC_BIND_PORT", "5555"))
 TIMEOUT_SECS = int(os.environ.get("OPS_EXEC_TIMEOUT_SECONDS", "30"))
 
 # Simple, safe default allowlist. Override with OPS_EXEC_ALLOWLIST="ls,uname,uptime,whoami,echo"
-DEFAULT_ALLOWLIST = ["ls", "uname", "uptime", "whoami", "echo"]
+DEFAULT_ALLOWLIST = ["ls", "uname", "whoami", "echo"]
 ALLOWLIST: List[str] = [c.strip() for c in os.environ.get("OPS_EXEC_ALLOWLIST", ",".join(DEFAULT_ALLOWLIST)).split(",") if c.strip()]
 
 MAX_OUTPUT_CHARS = int(os.environ.get("OPS_EXEC_MAX_OUTPUT", "100000"))  # 100KB
@@ -107,10 +107,9 @@ def run_command(cmd: str, args: List[str]):
 
 class ExecRequestHandler(socketserver.StreamRequestHandler):
     def handle(self):
-        peer = getattr(self.request, 'getpeername', lambda: None)()
-        log(f"connection from {peer}")
         try:
-            data = self.rfile.read()
+            # Read a single line-delimited JSON request
+            data = self.rfile.readline()
             if not data:
                 self._send({"ok": False, "error": "empty_request"})
                 return
@@ -121,6 +120,10 @@ class ExecRequestHandler(socketserver.StreamRequestHandler):
                 self._send({"ok": False, "error": "bad_json", "message": str(e)})
                 return
 
+            caller = req.get("caller")
+            if caller:
+                log(f"caller: {caller}")
+
             cmd = req.get("cmd")
             args = req.get("args", [])
 
@@ -130,7 +133,7 @@ class ExecRequestHandler(socketserver.StreamRequestHandler):
                 self._send({"ok": False, "error": "validation", "message": str(ve)})
                 return
 
-            log(f"exec: {base} {args}")
+            log(f"exec: {base} {args} \n")
             result = run_command(base, args)
             self._send(result)
         except Exception as e:

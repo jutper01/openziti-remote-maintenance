@@ -118,15 +118,36 @@ ziti edge list service-edge-router-policies
 
 ✅ **Identity and service configuration complete!**
 
-## What's Next?
+## Step 6: Start the Edge Agent and Operator CLI
 
-With identities and services configured, the next steps are:
-- **Edge Agent Implementation** - Code that binds the three services on the edge-device container
-- **Operator Dashboard** - Web UI that dials services for remote maintenance
-- **Security Verification** - Nmap scans, Wireshark analysis
-- **Performance Benchmarking** - Latency, throughput measurements
+With identities and services created, start the edge agent inside the `edge-device` container and the operator CLI inside the `operator-dashboard` container. Note: Run the following `docker compose` commands from the project root (where `docker-compose.yaml` is located).
 
-For detailed technical requirements and design, see **[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)**
+1. Start the edge agent (runs in foreground; use `sh` in the container):
+
+```bash
+docker compose exec edge-device sh -lc '/var/local/scripts/start-edge-agent.sh'
+```
+
+The script creates a Python venv, installs dependencies, and binds the `ops.exec` service. It also ensures native OS libraries required by the OpenZiti Python SDK are present.
+
+2. Start the operator CLI (interactive shell with venv activated):
+
+```bash
+docker compose exec -it operator-dashboard /var/local/scripts/start-operator-cli.sh
+```
+
+The operator startup script will prepare a venv, install `openziti`, and drop you into a shell where the venv is activated. From there you can run the CLI:
+
+```bash
+# examples
+python /app/operator_cli.py uname -a
+python /app/operator_cli.py ls -la /app
+python /app/operator_cli.py echo "Hello from operator"
+```
+
+3. Notes:
+- The edge agent enforces a command allowlist. Adjust with `OPS_EXEC_ALLOWLIST` environment variable when starting the agent (comma-separated list).
+- The agent attempts to clean up its Ziti binding (terminator) on clean shutdown (SIGINT/SIGTERM). If you see orphaned terminators, stopping the agent with Ctrl+C should remove them.
 
 ## Useful Commands
 

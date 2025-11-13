@@ -70,10 +70,6 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
    docker-compose up -d
    ```
 
-4. **Access ZAC (Admin Console)**
-   - Open: https://localhost:8443
-   - Login: `admin` / `admin` (or your `.env` password)
-
 📖 **For detailed setup instructions, see [QUICKSTART.md](QUICKSTART.md)**
 
 ## 📁 Project Structure
@@ -100,8 +96,8 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 - [x] ZAC (Admin Console) web interface
 - [x] Edge device and operator dashboard containers
 - [x] OpenZiti identities, service & router definitions
-- [ ] Edge agent implementation (ops.exec MVP)
-- [ ] Operator dashboard CLI implementation (exec command)
+- [x] Edge agent implementation (ops.exec MVP)
+- [x] Operator dashboard CLI implementation (exec command)
 - [ ] Additional services (ops.files, ops.forward)
 - [ ] Hardware integration (Siemens PLC & HMI deployment if time permits)
 - [ ] Security verification & benchmarking
