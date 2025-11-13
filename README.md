@@ -33,8 +33,8 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 
 | Service | Purpose | Status |
 |---------|---------|--------|
-| `ops.exec` | Remote command execution with allowlist | 🏋️‍♂️ MVP in Progress |
-| `ops.files` | Secure bidirectional file transfer | 🚧 Planned |
+| `ops.exec` | Remote command execution with allowlist | ✅ MVP Complete |
+| `ops.files` | Secure bidirectional file transfer | 🏋️‍♂️ In Progress |
 | `ops.forward` | Port forwarding to access local UIs | 🚧 Planned |
 
 ## 💻 Technology Stack
@@ -99,7 +99,7 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 - [x] Edge agent implementation (ops.exec MVP)
 - [x] Operator dashboard CLI implementation (exec command)
 - [ ] Additional services (ops.files, ops.forward)
-- [ ] Hardware integration (Siemens PLC & HMI deployment if time permits)
+- [ ] Operator dashboard UI enhancements
 - [ ] Security verification & benchmarking
 
 ## 📖 Documentation

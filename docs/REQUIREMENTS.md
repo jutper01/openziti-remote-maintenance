@@ -66,7 +66,7 @@ Industrial service engineers need secure remote access to OT devices (PLCs, HMIs
 ```
 ┌─────────────────┐         ┌──────────────────┐         ┌─────────────────┐
 │  Operator App   │◄───────►│  OpenZiti        │◄───────►│   Edge Agent    │
-│  (Dashboard)    │  Dials  │  Overlay Network │  Binds  │  (OT Device)    │
+│ (Dashboard/CLI) │  Dials  │  Overlay Network │  Binds  │  (OT Device)    │
 └─────────────────┘         └──────────────────┘         └─────────────────┘
                                     │
                             ┌───────┴────────┐
@@ -77,7 +77,7 @@ Industrial service engineers need secure remote access to OT devices (PLCs, HMIs
 
 **Key Concepts:**
 - **Bind** - Edge Agent hosts/provides services
-- **Dial** - Operator consumes/accesses services  
+- **Dial** - Operator consumes/accesses services
 - **Controller** - Manages identities, policies, routing
 - **Overlay Network** - Encrypted tunnels, no direct IP connectivity
 
@@ -100,24 +100,9 @@ Industrial service engineers need secure remote access to OT devices (PLCs, HMIs
 - OpenZiti controller remains centralized (cloud or on-premise)
 - Edge Agent runs on industrial gateway or directly on capable PLCs
 - Operator dashboard runs on engineer workstations
-- Optional: Deploy to real Siemens hardware (PLC + HMI via TIA Portal)
 
-#### SDK Selection: Python vs Node.js
-**Criteria:**
-- OpenZiti SDK availability and maturity
-- Ease of development for prototype
-- Performance (latency, throughput)
-- OT compatibility (can it run on industrial hardware?)
-
-**Decision:** TBD - Will evaluate both:
-- **Python** - `openziti-python` SDK, good for scripting, widely used in OT automation
-- **Node.js** - `@openziti/ziti-sdk-nodejs`, async-first, good for dashboards
-
-#### Simplified Architecture (No Separate Router)
-- Controller includes built-in routing for prototype
-- Simplifies deployment and reduces moving parts
-- Sufficient for single-device proof of concept
-- Production: Add dedicated edge routers for scale and redundancy
+#### SDK Selection: Python
+This prototype uses the Python SDK (`openziti`) for both the agent and the CLI.
 
 ## Security Considerations
 
@@ -125,26 +110,14 @@ Industrial service engineers need secure remote access to OT devices (PLCs, HMIs
 - **Cryptographic identities** - X.509 certificates, no passwords
 - **Enrollment process** - One-time JWT token → permanent identity certificate
 - **Private keys** - Generated on device, never transmitted
-- **Mutual TLS** - Both client and server authenticate
 
 ### Authorization & Policies
-- **Service Policies** - Define who can access what
-  - Bind policies: Which identities can host services
-  - Dial policies: Which identities can access services
-- **Role-based selectors** - `@identity-name` or `#role-tag`
-- **Least privilege** - Only grant necessary permissions
-
-### Network Security
-- **No open ports** - Edge devices make outbound connections only
-- **Encrypted overlay** - All traffic encrypted end-to-end
-- **No direct IP routing** - Controller mediates all connections
-- **Attack surface** - Minimal: only outbound HTTPS to controller
+- **Service Policies** - Define who can access what (bind/dial)
+- **Edge Router Policy** - The setup script creates service-edge-router-policies so services can reach routers
 
 ### Operational Security
 - **Command allowlisting** - ops.exec only runs pre-approved commands
-- **File integrity** - Checksums verify uploads/downloads
-- **Audit logging** - Track all service access attempts
-- **Session management** - Time-limited connections, automatic cleanup
+- **Audit logging** - Agent emits structured JSON responses for operator actions
 
 ## Implementation Details
 
@@ -152,106 +125,7 @@ Industrial service engineers need secure remote access to OT devices (PLCs, HMIs
 | Component | Technology | Rationale |
 |-----------|-----------|-----------|
 | Controller | OpenZiti quickstart (Docker) | Official image, includes routing |
-| Admin UI | ZAC (Ziti Admin Console) | Web-based management, built-in |
+| Admin UI | ZAC (Ziti Admin Console) | Web-based management |
 | Edge Agent | Python 3.12 slim | Lightweight, good SDK support |
-| Operator Dashboard | Python 3.12 slim + Web UI | Consistent stack, good SDK support |
+| Operator CLI | Python 3.12 slim | Simple CLI used for testing/demos |
 | Infrastructure | Docker Compose | Fast iteration, easy cleanup |
-
-### Agent Implementation (Planned)
-```python
-# Pseudocode for edge agent
-from openziti import zitiContext
-
-# Load enrolled identity
-context = zitiContext('/ziti-config/edge-device.json')
-
-# Bind services
-context.bind('ops.exec', handle_exec)
-context.bind('ops.files', handle_files)
-context.bind('ops.forward', handle_forward)
-
-# Run event loop
-context.run()
-```
-
-### Operator Dashboard (Planned)
-- **Phase 1:** CLI tool for testing
-  - `./operator.py exec "uptime"`
-  - `./operator.py upload firmware.bin`
-  - `./operator.py forward 3000:8080`
-  
-- **Phase 2:** Web UI for usability
-  - React/Vue dashboard
-  - Real-time command output
-  - File upload/download progress
-  - Connection status indicators
-
-## Verification & Benchmarking
-
-### Security Verification
-1. **Port Scan (Nmap)**
-   - Before: Scan edge device directly
-   - After: Scan with OpenZiti (should show no open ports)
-   - Expected: All services hidden behind overlay
-
-2. **Traffic Analysis (Wireshark)**
-   - Capture packets during service usage
-   - Verify encryption (no plaintext commands/data)
-   - Confirm only HTTPS to controller visible
-
-3. **Attack Simulation**
-   - Attempt unauthorized service access
-   - Test identity theft scenarios
-   - Verify policy enforcement
-
-### Performance Benchmarking
-1. **Latency**
-   - Measure p50, p95, p99 for command execution
-   - Compare: Direct SSH vs OpenZiti overlay
-   - Target: < 100ms overhead for typical commands
-
-2. **Throughput**
-   - File transfer speed (MB/s)
-   - Large file handling (100MB+)
-   - Chunked transfer efficiency
-
-3. **Connection Setup**
-   - Time to establish overlay connection
-   - Identity verification overhead
-   - Service binding/dialing latency
-
-4. **Resource Usage**
-   - Agent CPU/memory footprint
-   - Controller resource requirements
-   - Scalability: 1 device vs 10 vs 100
-
-### Operational Metrics
-- Setup complexity (steps to deploy)
-- Maintenance overhead
-- Troubleshooting ease
-- Compare to VPN-based approach
-
-## Future Enhancements
-
-### Additional Services
-- **ops.telemetry** - Stream sensor data to cloud
-- **ops.backup** - Automated configuration backups
-- **ops.update** - Managed firmware deployment
-
-### Monitoring & Observability  
-- Grafana dashboards for overlay metrics
-- Prometheus for controller health
-- Distributed tracing for service calls
-
-### Advanced Features
-- Multi-device management (fleet operations)
-- Role-based access control (engineer levels)
-- Time-based access (temporary permissions)
-- Approval workflows (two-person rule)
-
-### Hardware Integration (Optional)
-- Deploy to Siemens S7-1500 PLC
-- Industrial gateway with OpenZiti agent
-- TIA Portal integration for HMI
-- S7 protocol communication
-- Real OT network testing behind SCALANCE router
