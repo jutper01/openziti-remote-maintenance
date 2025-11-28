@@ -143,6 +143,7 @@ The operator startup script will prepare a venv, install `openziti`, and drop yo
 python /app/operator_cli.py uname -a
 python /app/operator_cli.py ls -la /app
 python /app/operator_cli.py echo "Hello from operator"
+python /app/operator_cli.py cat /app/edge_agent.py
 ```
 
 3. Notes:

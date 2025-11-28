@@ -77,10 +77,12 @@ echo "[operator-cli] ✅ Ready to execute commands"
 echo ""
 echo "Usage: python $CLI_FILE <command> [args...]"
 echo ""
-echo "Examples:"
+echo "Valid Examples:"
 echo "  python $CLI_FILE uname -a"
 echo "  python $CLI_FILE ls -la /app"
 echo "  python $CLI_FILE echo 'Hello from operator'"
+echo "Non-valid Examples:"
+echo "  python $CLI_FILE cat /app/edge_agent.py"
 echo ""
 
 # Auto-activate venv in future bash sessions
