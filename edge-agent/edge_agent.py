@@ -9,16 +9,21 @@ import threading
 import time
 import atexit
 from typing import List
+import base64
+import hashlib
 
 # Third-party
 import openziti # type: ignore
 
 # Configuration
 IDENTITY_PATH = os.environ.get("ZITI_EDGE_IDENTITY", "/ziti-config/edge-device.json")
-SERVICE_NAME = os.environ.get("OPS_EXEC_SERVICE", "ops.exec")
-BIND_ADDR = os.environ.get("OPS_EXEC_BIND_ADDR", "0.0.0.0")
-BIND_PORT = int(os.environ.get("OPS_EXEC_BIND_PORT", "5555"))
+OPS_EXEC_SERVICE = os.environ.get("OPS_EXEC_SERVICE", "ops.exec")
+OPS_FILES_SERVICE = os.environ.get("OPS_FILES_SERVICE", "ops.files")
+BIND_ADDR = os.environ.get("OPS_BIND_ADDR", "0.0.0.0")
+OPS_EXEC_BIND_PORT = int(os.environ.get("OPS_EXEC_BIND_PORT", "5555"))
+OPS_FILES_BIND_PORT = int(os.environ.get("OPS_FILES_BIND_PORT", "5556"))
 TIMEOUT_SECS = int(os.environ.get("OPS_EXEC_TIMEOUT_SECONDS", "30"))
+OPS_FILES_BASE_DIR = os.environ.get("OPS_FILES_BASE_DIR", "/var/local/ops_files")
 
 # Simple, safe default allowlist. Override with OPS_EXEC_ALLOWLIST="ls,uname,uptime,whoami,echo"
 DEFAULT_ALLOWLIST = ["ls", "uname", "whoami", "echo"]
@@ -29,6 +34,14 @@ MAX_OUTPUT_CHARS = int(os.environ.get("OPS_EXEC_MAX_OUTPUT", "100000"))  # 100KB
 
 def log(msg: str):
     print(f"[edge-agent][ops.exec] {msg}")
+
+
+def _safe_join(base: str, rel_path: str) -> str:
+    base = os.path.abspath(base)
+    target = os.path.normpath(os.path.join(base, rel_path))
+    if not target.startswith(base + os.sep) and target != base:
+        raise ValueError("path outside base directory")
+    return target
 
 
 def validate_command(cmd: str, args: List[str]) -> str:
@@ -105,6 +118,108 @@ def run_command(cmd: str, args: List[str]):
         }
 
 
+class FilesRequestHandler(socketserver.StreamRequestHandler):
+    """Very small MVP files handler.
+
+    Protocol (single-line JSON):
+    - upload: {"op":"upload","path":"rel/path","data":"<base64>", "caller":...}
+      server writes file to OPS_FILES_BASE_DIR/rel/path and replies {ok: true, size:, sha256:}
+    """
+
+    def handle(self):
+        try:
+            line = self.rfile.readline()
+            if not line:
+                self._send({"ok": False, "error": "empty_request"})
+                return
+            try:
+                req = json.loads(line.decode("utf-8"))
+            except Exception as e:
+                self._send({"ok": False, "error": "bad_json", "message": str(e)})
+                return
+
+            op = req.get("op")
+            caller = req.get("caller")
+            if caller:
+                log(f"files caller: {caller}")
+
+            if op == "upload":
+                path = req.get("path")
+                data_b64 = req.get("data")
+                if not path or not data_b64:
+                    self._send({"ok": False, "error": "validation", "message": "missing path or data"})
+                    return
+
+                try:
+                    final_path = _safe_join(OPS_FILES_BASE_DIR, path)
+                except ValueError:
+                    self._send({"ok": False, "error": "path_forbidden"})
+                    return
+
+                os.makedirs(os.path.dirname(final_path), exist_ok=True)
+                try:
+                    data = base64.b64decode(data_b64)
+                except Exception:
+                    self._send({"ok": False, "error": "bad_base64"})
+                    return
+
+                try:
+                    with open(final_path, "wb") as f:
+                        f.write(data)
+                        f.flush()
+                        os.fsync(f.fileno())
+                except Exception as e:
+                    self._send({"ok": False, "error": "io_error", "message": str(e)})
+                    return
+
+                sha = hashlib.sha256(data).hexdigest()
+                self._send({"ok": True, "path": final_path, "size": len(data), "sha256": sha})
+                return
+
+            if op == "download":
+                path = req.get("path")
+                if not path:
+                    self._send({"ok": False, "error": "validation", "message": "missing path"})
+                    return
+
+                try:
+                    final_path = _safe_join(OPS_FILES_BASE_DIR, path)
+                except ValueError:
+                    self._send({"ok": False, "error": "path_forbidden"})
+                    return
+
+                if not os.path.exists(final_path):
+                    self._send({"ok": False, "error": "not_found", "message": "file not found"})
+                    return
+
+                try:
+                    with open(final_path, "rb") as f:
+                        data = f.read()
+                except Exception as e:
+                    self._send({"ok": False, "error": "io_error", "message": str(e)})
+                    return
+
+                b64 = base64.b64encode(data).decode("ascii")
+                sha = hashlib.sha256(data).hexdigest()
+                self._send({"ok": True, "path": final_path, "size": len(data), "data": b64, "sha256": sha})
+                return
+
+            else:
+                self._send({"ok": False, "error": "unsupported_op", "message": f"op={op}"})
+                return
+
+        except Exception as e:
+            self._send({"ok": False, "error": "handler_error", "message": str(e)})
+
+    def _send(self, obj):
+        payload = (json.dumps(obj) + "\n").encode("utf-8")
+        try:
+            self.wfile.write(payload)
+            self.wfile.flush()
+        except Exception:
+            pass
+
+
 class ExecRequestHandler(socketserver.StreamRequestHandler):
     def handle(self):
         try:
@@ -170,72 +285,58 @@ def main():
     # Install signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+
+    os.makedirs(OPS_FILES_BASE_DIR, exist_ok=True)
+
+    log(f"Loading Identity from {IDENTITY_PATH}...")
     
-    # Configure ziti binding: redirect OS listen on BIND_ADDR:BIND_PORT to Ziti service SERVICE_NAME
-    binding_cfg = {"ztx": IDENTITY_PATH, "service": SERVICE_NAME}
-    patcher = None
     try:
-        # Keep a handle to the patcher if available so we can explicitly unpatch on shutdown
-        patcher = openziti.monkeypatch(bindings={(BIND_ADDR, BIND_PORT): binding_cfg})
-    except Exception:
-        # Some SDK versions don't return a patcher; proceed regardless
-        openziti.monkeypatch(bindings={(BIND_ADDR, BIND_PORT): binding_cfg})
+        # Load Ziti identity
+        ziti_id, status_code = openziti.load(IDENTITY_PATH)
+    except Exception as e:
+        log(f"❌ Failed to load identity: {e}")
+        sys.exit(1)
 
-    # Best-effort cleanup at process exit as a safety net
-    def _cleanup_on_exit():
-        try:
-            log("cleaning up ziti bindings...")
-            if patcher and hasattr(patcher, "close"):
-                patcher.close()
-        except Exception:
-            pass
-        try:
-            # If the SDK exposes an unmonkeypatch/reset, call it; ignore if not present
-            if hasattr(openziti, "unmonkeypatch"):
-                openziti.unmonkeypatch()
-        except Exception:
-            pass
+    # Configure ziti bindings for exec and files and ensure files dir exists
 
-    atexit.register(_cleanup_on_exit)
+    binding_cfg_exec = {"ztx": ziti_id, "service": OPS_EXEC_SERVICE}
+    binding_cfg_files = {"ztx": ziti_id, "service": OPS_FILES_SERVICE}
 
-    with ThreadedTCPServer((BIND_ADDR, BIND_PORT), ExecRequestHandler) as srv:
-        log(
-            f"binding service '{SERVICE_NAME}' with identity '{IDENTITY_PATH}' as {BIND_ADDR}:{BIND_PORT}"
-        )
-        
-        # Run server in a thread so we can check shutdown_event
-        server_thread = threading.Thread(target=srv.serve_forever, daemon=True)
-        server_thread.start()
-        
-        # Poll shutdown event to allow signal handlers to work
-        while not shutdown_event.is_set():
-            time.sleep(0.2)
-        
-        # Clean shutdown
-        log("stopping server...")
-        srv.shutdown()
-        # Ensure the underlying listening socket is closed
-        try:
-            srv.server_close()
-        except Exception:
-            pass
-        server_thread.join(timeout=2)
-        
-        # Explicitly unpatch/cleanup Ziti bindings to drop the terminator
-        try:
-            if patcher and hasattr(patcher, "close"):
-                patcher.close()
-        except Exception:
-            pass
-        try:
-            if hasattr(openziti, "unmonkeypatch"):
-                openziti.unmonkeypatch()
-        except Exception:
-            pass
+    log(f"Starting Ziti application with bindings for {OPS_EXEC_SERVICE} and {OPS_FILES_SERVICE}")
 
-        log("exited cleanly")
-        sys.exit(0)
+    # Use a single 'with' statement for ALL Ziti-enabled operations
+    try:
+        with openziti.monkeypatch(bindings={
+            (BIND_ADDR, OPS_EXEC_BIND_PORT): binding_cfg_exec,
+            (BIND_ADDR, OPS_FILES_BIND_PORT): binding_cfg_files,
+        }):
+            # Start the exec server
+            exec_server = ThreadedTCPServer((BIND_ADDR, OPS_EXEC_BIND_PORT), ExecRequestHandler)
+            exec_thread = threading.Thread(target=exec_server.serve_forever, name="ExecServerThread", daemon=True)
+            exec_thread.start()
+            log(f"ops.exec server listening on {BIND_ADDR}:{OPS_EXEC_BIND_PORT}")
 
+            # Start the files server
+            files_server = ThreadedTCPServer((BIND_ADDR, OPS_FILES_BIND_PORT), FilesRequestHandler)
+            files_thread = threading.Thread(target=files_server.serve_forever, name="FilesServerThread", daemon=True)
+            files_thread.start()
+            log(f"ops.files server listening on {BIND_ADDR}:{OPS_FILES_BIND_PORT}")
+
+            # Wait for shutdown event
+            while not shutdown_event.is_set():
+                time.sleep(1)
+
+            # Shutdown servers
+            log("shutting down servers...")
+            exec_server.shutdown()
+            files_server.shutdown()
+            exec_server.server_close()
+            files_server.server_close()
+            log("servers shut down, exiting.")
+
+    except Exception as e:
+        log(f"❌ fatal error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

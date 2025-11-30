@@ -21,7 +21,9 @@ import socket
 
 # Configuration
 IDENTITY_PATH = os.environ.get("ZITI_OPERATOR_IDENTITY", "/ziti-config/operator.json")
-SERVICE_NAME = os.environ.get("OPS_EXEC_SERVICE", "ops.exec")
+# Default services; can be overridden via env or CLI
+DEFAULT_EXEC_SERVICE = os.environ.get("OPS_EXEC_SERVICE", "ops.exec")
+DEFAULT_FILES_SERVICE = os.environ.get("OPS_FILES_SERVICE", "ops.files")
 RECV_BUFFER = 65536  # 64KB
 
 
@@ -30,7 +32,7 @@ def log(msg: str):
     print(f"[operator-cli] {msg}", file=sys.stderr)
 
 
-def execute_command(cmd: str, args: List[str]) -> dict:
+def execute_command(cmd: str, args: List[str], service: str) -> dict:
     """
     Execute a command on the edge device via ops.exec service.
     
@@ -51,15 +53,15 @@ def execute_command(cmd: str, args: List[str]) -> dict:
         log(f"❌ failed to load identity: {e}")
         return {"ok": False, "error": "identity_load_error", "message": str(e)}
 
-    log(f"dialing service: {SERVICE_NAME}")
+    log(f"dialing service: {service}")
 
     # Create a Ziti socket (service-based addressing uses (service_name, arbitrary_port))
     try:
         sock = openziti.socket(type=socket.SOCK_STREAM)
         port = 65535  # arbitrary placeholder per SDK examples
-        sock.connect((SERVICE_NAME, port))
+        sock.connect((service, port))
     except Exception as e:
-        log(f"❌ failed to connect to service '{SERVICE_NAME}': {e}")
+        log(f"❌ failed to connect to service '{service}': {e}")
         return {"ok": False, "error": "connection_error", "message": str(e)}
     
     try:
@@ -183,8 +185,143 @@ def main():
     
     log(f"executing: {cmd} {' '.join(args)}")
     
-    # Execute the command
-    response = execute_command(cmd, args)
+    # Choose service and perform action. Support a simple file upload command:
+    #   operator_cli.py upload <local_path> <remote_path>
+    if cmd == "upload":
+        # file upload via ops.files
+        if len(args) < 2:
+            print("Usage: operator_cli.py upload <local_path> <remote_path>", file=sys.stderr)
+            sys.exit(1)
+        local_path = args[0]
+        remote_path = args[1]
+        # Normalize remote path: disallow absolute paths from operator side by
+        # converting a leading '/' into a relative path. The agent will still
+        # enforce directory traversal rules server-side.
+        if remote_path.startswith("/"):
+            remote_path = remote_path.lstrip("/")
+        service = os.environ.get("OPS_FILES_SERVICE", DEFAULT_FILES_SERVICE)
+        # Read and base64-encode the file
+        try:
+            with open(local_path, "rb") as f:
+                data = f.read()
+        except Exception as e:
+            log(f"❌ failed to read local file '{local_path}': {e}")
+            sys.exit(1)
+        import base64
+        payload = {"op": "upload", "path": remote_path, "data": base64.b64encode(data).decode("ascii"), "caller": os.environ.get("ZITI_IDENTITY_NAME") or os.path.splitext(os.path.basename(IDENTITY_PATH))[0]}
+
+        # send via same socket logic
+        response = None
+        try:
+            openziti.load(IDENTITY_PATH)
+        except Exception as e:
+            log(f"❌ failed to load identity: {e}")
+            response = {"ok": False, "error": "identity_load_error", "message": str(e)}
+
+        if response is None:
+            sock = None
+            try:
+                sock = openziti.socket(type=socket.SOCK_STREAM)
+                sock.connect((service, 65535))
+                sock.sendall((json.dumps(payload) + "\n").encode("utf-8"))
+                # read single-line response
+                chunks = []
+                while True:
+                    chunk = sock.recv(4096)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    if b"\n" in chunk:
+                        break
+                raw = b"".join(chunks)
+                nl = raw.find(b"\n")
+                if nl != -1:
+                    raw = raw[:nl]
+                response = json.loads(raw.decode("utf-8", errors="replace"))
+            except Exception as e:
+                log(f"❌ upload failed: {e}")
+                response = {"ok": False, "error": "upload_error", "message": str(e)}
+            finally:
+                if sock:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+
+    elif cmd == "download":
+        # download: operator_cli.py download <remote_path> <local_path>
+        if len(args) < 2:
+            print("Usage: operator_cli.py download <remote_path> <local_path>", file=sys.stderr)
+            sys.exit(1)
+        remote_path = args[0]
+        local_path = args[1]
+        # normalize remote path
+        if remote_path.startswith("/"):
+            remote_path = remote_path.lstrip("/")
+
+        service = os.environ.get("OPS_FILES_SERVICE", DEFAULT_FILES_SERVICE)
+        payload = {"op": "download", "path": remote_path, "caller": os.environ.get("ZITI_IDENTITY_NAME") or os.path.splitext(os.path.basename(IDENTITY_PATH))[0]}
+
+        sock = None
+        try:
+            try:
+                openziti.load(IDENTITY_PATH)
+            except Exception as e:
+                log(f"❌ failed to load identity: {e}")
+                sys.exit(1)
+
+            sock = openziti.socket(type=socket.SOCK_STREAM)
+            sock.connect((service, 65535))
+            sock.sendall((json.dumps(payload) + "\n").encode("utf-8"))
+
+            # Read single-line JSON response
+            chunks = []
+            while True:
+                chunk = sock.recv(8192)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                if b"\n" in chunk:
+                    break
+            raw = b"".join(chunks)
+            nl = raw.find(b"\n")
+            if nl != -1:
+                raw = raw[:nl]
+            response = json.loads(raw.decode("utf-8", errors="replace"))
+
+            if not response.get("ok"):
+                log(f"❌ download failed: {response.get('error')} {response.get('message','')}")
+            else:
+                data_b64 = response.get("data")
+                if data_b64 is None:
+                    log("❌ download response missing data field")
+                    response = {"ok": False, "error": "missing_data", "message": "no data in response"}
+                else:
+                    import base64
+                    try:
+                        data = base64.b64decode(data_b64)
+                        # write to local_path
+                        with open(local_path, "wb") as f:
+                            f.write(data)
+                        log(f"✅ downloaded {response.get('path')} -> {local_path} (size={len(data)})")
+                    except Exception as e:
+                        log(f"❌ failed to write local file: {e}")
+                        response = {"ok": False, "error": "write_error", "message": str(e)}
+
+        except Exception as e:
+            log(f"❌ download failed: {e}")
+            response = {"ok": False, "error": "download_error", "message": str(e)}
+        finally:
+            if sock:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+
+    else:
+        # default: execute command via ops.exec
+        service = os.environ.get("OPS_EXEC_SERVICE", DEFAULT_EXEC_SERVICE)
+        response = execute_command(cmd, args, service)
     
     # Format and print the response
     print(format_response(response))

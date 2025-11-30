@@ -34,8 +34,8 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 | Service | Purpose | Status |
 |---------|---------|--------|
 | `ops.exec` | Remote command execution with allowlist | ✅ MVP Complete |
-| `ops.files` | Secure bidirectional file transfer | 🏋️‍♂️ In Progress |
-| `ops.forward` | Port forwarding to access local UIs | 🚧 Planned |
+| `ops.files` | Secure bidirectional file transfer | ✅ MVP Complete |
+| `ops.forward` | Port forwarding to access local UIs | 🏋️‍♂️ In Progress |
 
 ## 💻 Technology Stack
 

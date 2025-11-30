@@ -139,11 +139,17 @@ docker compose exec -it operator-dashboard /var/local/scripts/start-operator-cli
 The operator startup script will prepare a venv, install `openziti`, and drop you into a shell where the venv is activated. From there you can run the CLI:
 
 ```bash
-# examples
+# Remote Exec examples (using `ops.exec`)
 python /app/operator_cli.py uname -a
 python /app/operator_cli.py ls -la /app
 python /app/operator_cli.py echo "Hello from operator"
 python /app/operator_cli.py cat /app/edge_agent.py
+
+# File transfer examples (using `ops.files`)
+# Upload local file -> remote path (remote path is relative; leading '/' will be stripped)
+python /app/operator_cli.py upload /app/local-file.txt uploaded/remote-file.txt
+# Download remote file -> local path
+python /app/operator_cli.py download uploaded/remote-file.txt /tmp/hello-downloaded.txt
 ```
 
 3. Notes:
