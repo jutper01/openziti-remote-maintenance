@@ -88,7 +88,10 @@ echo "  check with: python $CLI_FILE ls -la /var/local/ops_files/uploaded"
 echo "  python $CLI_FILE download /uploaded/hello.txt /tmp/hello-downloaded.txt"
 echo "  check with: cat /tmp/hello-downloaded.txt"
 echo ""
-echo "Notes: exec commands are sent to the ops.exec service; upload/download use ops.files."
+echo "Valid Examples (forward):"
+echo "  python $CLI_FILE forward <remote_host:port> <local_port>"
+echo "  e.g.: python $CLI_FILE forward 127.0.0.1:8080 3000"
+echo "  Then access the forwarded service at localhost:3000"
 echo ""
 
 # Auto-activate venv in future bash sessions

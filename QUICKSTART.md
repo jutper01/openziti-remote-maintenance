@@ -128,7 +128,7 @@ With identities and services created, start the edge agent inside the `edge-devi
 docker compose exec edge-device sh -lc '/var/local/scripts/start-edge-agent.sh'
 ```
 
-The script creates a Python venv, installs dependencies, and binds the `ops.exec` service. It also ensures native OS libraries required by the OpenZiti Python SDK are present.
+The script creates a Python venv, installs dependencies, and binds all services. It also ensures native OS libraries required by the OpenZiti Python SDK are present.
 
 2. Start the operator CLI (interactive shell with venv activated):
 
