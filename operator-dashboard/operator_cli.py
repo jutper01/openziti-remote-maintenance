@@ -18,12 +18,14 @@ from typing import List
 # Third-party
 import openziti # type: ignore
 import socket
+import threading
 
 # Configuration
 IDENTITY_PATH = os.environ.get("ZITI_OPERATOR_IDENTITY", "/ziti-config/operator.json")
 # Default services; can be overridden via env or CLI
 DEFAULT_EXEC_SERVICE = os.environ.get("OPS_EXEC_SERVICE", "ops.exec")
 DEFAULT_FILES_SERVICE = os.environ.get("OPS_FILES_SERVICE", "ops.files")
+DEFAULT_FORWARD_SERVICE = os.environ.get("OPS_FORWARD_SERVICE", "ops.forward")
 RECV_BUFFER = 65536  # 64KB
 
 
@@ -177,6 +179,9 @@ def main():
         print("  operator_cli.py ls -la /app", file=sys.stderr)
         print("  operator_cli.py uptime", file=sys.stderr)
         print("  operator_cli.py echo 'Hello from operator'", file=sys.stderr)
+        print("  operator_cli.py upload <local_path> <remote_path>", file=sys.stderr)
+        print("  operator_cli.py download <remote_path> <local_path>", file=sys.stderr)
+        print("  operator_cli.py forward <remote_host:port> <local_port>", file=sys.stderr)
         sys.exit(1)
     
     # Parse command and arguments
@@ -318,19 +323,113 @@ def main():
                 except Exception:
                     pass
 
+    elif cmd == "forward":
+        # operator_cli.py forward <remote_host:port> <local_port>
+        if len(args) < 2:
+            print("Usage: operator_cli.py forward <remote_host:port> <local_port>", file=sys.stderr)
+            sys.exit(1)
+        remote_target = args[0]
+        local_port = args[1]
+        # Start forwarding (blocks until Ctrl+C)
+        service = os.environ.get("OPS_FORWARD_SERVICE", DEFAULT_FORWARD_SERVICE)
+        forward_server(remote_target, int(local_port), service)
+        return
+
     else:
         # default: execute command via ops.exec
         service = os.environ.get("OPS_EXEC_SERVICE", DEFAULT_EXEC_SERVICE)
         response = execute_command(cmd, args, service)
-    
+
     # Format and print the response
     print(format_response(response))
-    
+
     # Exit with the remote command's exit code if available
     if response.get("ok") and "exit_code" in response:
         sys.exit(response["exit_code"])
     elif not response.get("ok"):
         sys.exit(1)
+
+
+def forward_server(remote_target: str, local_port: int, service: str = DEFAULT_FORWARD_SERVICE):
+    """Listen on localhost:`local_port` and forward each connection to `remote_target`
+    via the given Ziti `service` (ops.forward)."""
+
+    caller = os.environ.get("ZITI_IDENTITY_NAME") or os.path.splitext(os.path.basename(IDENTITY_PATH))[0]
+
+    # Ensure identity loaded once
+    try:
+        openziti.load(IDENTITY_PATH)
+    except Exception as e:
+        log(f"❌ failed to load identity for forwarding: {e}")
+        return
+
+    bind_addr = os.environ.get("OPS_FORWARD_BIND_ADDR", "0.0.0.0")
+    listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listen_sock.bind((bind_addr, int(local_port)))
+    listen_sock.listen(5)
+    log(f"Forwarding: local {bind_addr}:{local_port} -> remote {remote_target} via service {service}")
+
+    def handle_client(client_sock, addr):
+        ziti_sock = None
+        try:
+            ziti_sock = openziti.socket(type=socket.SOCK_STREAM)
+            ziti_sock.connect((service, 65535))
+
+            # Use a raw TCP tunnel — do not send a JSON header.
+            # The agent expects a raw TCP stream and will connect to its configured target.
+
+            # Relay bytes between client_sock and ziti_sock
+            def relay(src, dst):
+                try:
+                    while True:
+                        data = src.recv(RECV_BUFFER)
+                        # openziti socket wrappers may return (data, meta) tuples — normalize.
+                        if isinstance(data, (tuple, list)) and len(data) > 0:
+                            data = data[0]
+                        if not data:
+                            break
+                        dst.sendall(data)
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        dst.shutdown(socket.SHUT_WR)
+                    except Exception:
+                        pass
+
+            t1 = threading.Thread(target=relay, args=(client_sock, ziti_sock), daemon=True)
+            t2 = threading.Thread(target=relay, args=(ziti_sock, client_sock), daemon=True)
+            t1.start(); t2.start()
+            t1.join(); t2.join()
+
+        except Exception as e:
+            log(f"❌ forward connection error: {e}")
+        finally:
+            try:
+                if ziti_sock:
+                    ziti_sock.close()
+            except Exception:
+                pass
+            try:
+                client_sock.close()
+            except Exception:
+                pass
+
+    try:
+        while True:
+            client, addr = listen_sock.accept()
+            t = threading.Thread(target=handle_client, args=(client, addr), daemon=True)
+            t.start()
+    except KeyboardInterrupt:
+        log("Stopping forward server")
+    finally:
+        try:
+            listen_sock.close()
+        except Exception:
+            pass
+    
+    
 
 
 if __name__ == "__main__":

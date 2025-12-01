@@ -3,6 +3,7 @@ import json
 import os
 import signal
 import socketserver
+import socket
 import subprocess
 import sys
 import threading
@@ -22,6 +23,15 @@ OPS_FILES_SERVICE = os.environ.get("OPS_FILES_SERVICE", "ops.files")
 BIND_ADDR = os.environ.get("OPS_BIND_ADDR", "0.0.0.0")
 OPS_EXEC_BIND_PORT = int(os.environ.get("OPS_EXEC_BIND_PORT", "5555"))
 OPS_FILES_BIND_PORT = int(os.environ.get("OPS_FILES_BIND_PORT", "5556"))
+OPS_FORWARD_SERVICE = os.environ.get("OPS_FORWARD_SERVICE", "ops.forward")
+OPS_FORWARD_BIND_PORT = int(os.environ.get("OPS_FORWARD_BIND_PORT", "5557"))
+# Comma-separated list of allowed forward hosts (default: localhost only)
+OPS_FORWARD_ALLOWED_HOSTS = [h.strip() for h in os.environ.get("OPS_FORWARD_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
+# Comma-separated list of allowed forward ports (default common HTTP/SSH/VNC ports)
+OPS_FORWARD_ALLOWED_PORTS = [int(p.strip()) for p in os.environ.get("OPS_FORWARD_ALLOWED_PORTS", "22,80,443,8080,5900").split(",") if p.strip()]
+# Default fixed target for raw forwarding (can be overridden via env)
+OPS_FORWARD_DEFAULT_TARGET_HOST = os.environ.get("OPS_FORWARD_DEFAULT_TARGET_HOST", "127.0.0.1")
+OPS_FORWARD_DEFAULT_TARGET_PORT = int(os.environ.get("OPS_FORWARD_DEFAULT_TARGET_PORT", "8080"))
 TIMEOUT_SECS = int(os.environ.get("OPS_EXEC_TIMEOUT_SECONDS", "30"))
 OPS_FILES_BASE_DIR = os.environ.get("OPS_FILES_BASE_DIR", "/var/local/ops_files")
 
@@ -270,6 +280,88 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     daemon_threads = True  # let threads die quickly on shutdown
 
 
+class ForwardRequestHandler(socketserver.StreamRequestHandler):
+    """Port-forwarding handler.
+
+    Protocol (single-line JSON header):
+    {"target":"host:port","caller":...}
+
+    After the header is received and validated, the handler opens a local TCP
+    connection to the target and relays raw bytes bidirectionally.
+    """
+
+    def handle(self):
+        # For raw TCP forwarding we do not expect a JSON header from the dialer.
+        # Use a fixed target (configurable via env) and simply relay raw bytes.
+        caller = None
+        try:
+            caller = getattr(self.request, 'caller', None)
+        except Exception:
+            caller = None
+
+        host = OPS_FORWARD_DEFAULT_TARGET_HOST
+        port = OPS_FORWARD_DEFAULT_TARGET_PORT
+
+        # Enforce allowed hosts and ports
+        if host not in OPS_FORWARD_ALLOWED_HOSTS:
+            self._send_error("forbidden", "host not allowed")
+            return
+        if port not in OPS_FORWARD_ALLOWED_PORTS:
+            self._send_error("forbidden", "port not allowed")
+            return
+
+        log(f"forward caller: {caller or 'unknown'} target: {host}:{port}")
+
+        try:
+            # Use explicit socket connect to avoid monkeypatch tuple issues
+            local_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            local_sock.settimeout(5)
+            local_sock.connect((host, port))
+        except Exception as e:
+            self._send_error("connect_failed", str(e))
+            return
+
+        # Relay raw bytes between the Ziti socket (self.request) and local_sock
+        def relay(src, dst):
+            try:
+                while True:
+                    data = src.recv(4096)
+                    # Normalize potential (data, meta) tuples from wrapped sockets
+                    if isinstance(data, (tuple, list)) and len(data) > 0:
+                        data = data[0]
+                    if not data:
+                        break
+                    dst.sendall(data)
+            except Exception:
+                pass
+            finally:
+                try:
+                    dst.shutdown(socket.SHUT_WR)
+                except Exception:
+                    pass
+
+        t1 = threading.Thread(target=relay, args=(self.request, local_sock), name="Fwd-Z2L", daemon=True)
+        t2 = threading.Thread(target=relay, args=(local_sock, self.request), name="Fwd-L2Z", daemon=True)
+        t1.start(); t2.start()
+        t1.join(); t2.join()
+
+        try:
+            local_sock.close()
+        except Exception:
+            pass
+
+    def _send_error(self, code, message=None):
+        obj = {"ok": False, "error": code}
+        if message:
+            obj["message"] = message
+        payload = (json.dumps(obj) + "\n").encode("utf-8")
+        try:
+            self.wfile.write(payload)
+            self.wfile.flush()
+        except Exception:
+            pass
+
+
 # Global shutdown event
 shutdown_event = threading.Event()
 
@@ -301,14 +393,16 @@ def main():
 
     binding_cfg_exec = {"ztx": ziti_id, "service": OPS_EXEC_SERVICE}
     binding_cfg_files = {"ztx": ziti_id, "service": OPS_FILES_SERVICE}
+    binding_cfg_forward = {"ztx": ziti_id, "service": OPS_FORWARD_SERVICE}
 
-    log(f"Starting Ziti application with bindings for {OPS_EXEC_SERVICE} and {OPS_FILES_SERVICE}")
+    log(f"Starting Ziti application with bindings for {OPS_EXEC_SERVICE}, {OPS_FILES_SERVICE} and {OPS_FORWARD_SERVICE}")
 
     # Use a single 'with' statement for ALL Ziti-enabled operations
     try:
         with openziti.monkeypatch(bindings={
             (BIND_ADDR, OPS_EXEC_BIND_PORT): binding_cfg_exec,
             (BIND_ADDR, OPS_FILES_BIND_PORT): binding_cfg_files,
+            (BIND_ADDR, OPS_FORWARD_BIND_PORT): binding_cfg_forward,
         }):
             # Start the exec server
             exec_server = ThreadedTCPServer((BIND_ADDR, OPS_EXEC_BIND_PORT), ExecRequestHandler)
@@ -322,6 +416,12 @@ def main():
             files_thread.start()
             log(f"ops.files server listening on {BIND_ADDR}:{OPS_FILES_BIND_PORT}")
 
+            # Start the forward server
+            forward_server = ThreadedTCPServer((BIND_ADDR, OPS_FORWARD_BIND_PORT), ForwardRequestHandler)
+            forward_thread = threading.Thread(target=forward_server.serve_forever, name="ForwardServerThread", daemon=True)
+            forward_thread.start()
+            log(f"ops.forward server listening on {BIND_ADDR}:{OPS_FORWARD_BIND_PORT}")
+
             # Wait for shutdown event
             while not shutdown_event.is_set():
                 time.sleep(1)
@@ -330,8 +430,10 @@ def main():
             log("shutting down servers...")
             exec_server.shutdown()
             files_server.shutdown()
+            forward_server.shutdown()
             exec_server.server_close()
             files_server.server_close()
+            forward_server.server_close()
             log("servers shut down, exiting.")
 
     except Exception as e:

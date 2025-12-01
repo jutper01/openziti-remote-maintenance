@@ -74,6 +74,37 @@ pip install -r "$REQ_FILE"
 
 echo "[edge-agent] ✅ dependencies installed"
 
+# Create a simple webroot and start a background HTTP server for demos
+# This provides the edge-local hidden HTTP service at 127.0.0.1:8080
+WEBROOT="/var/local/www"
+LOGDIR="/var/local/logs"
+mkdir -p "$WEBROOT" "$LOGDIR"
+if [ ! -f "$WEBROOT/index.html" ]; then
+  cat > "$WEBROOT/index.html" <<'HTML'
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Hidden HMI</title>
+  </head>
+  <body>
+    <h1>Hidden HMI: Access Granted!</h1>
+    <p>This page is served by the demo HTTP server started by <code>start-edge-agent.sh</code>.</p>
+  </body>
+</html>
+HTML
+  echo "[edge-agent] ✅ created $WEBROOT/index.html"
+else
+  echo "[edge-agent] ℹ️  $WEBROOT/index.html already exists; leaving intact"
+fi
+
+# Start a background HTTP server on 127.0.0.1:8080 serving $WEBROOT
+# Use the active Python binary so the venv Python is used if available.
+(
+  cd "$WEBROOT" && "$PY_BIN" -m http.server 8080 > "$LOGDIR/http-server.log" 2>&1 &
+)
+echo "[edge-agent] ▶ started demo HTTP server at 127.0.0.1:8080 (logs: $LOGDIR/http-server.log)"
+
 # 3) Start the agent
 export PYTHONUNBUFFERED=1
 echo "[edge-agent] ▶ launching agent: $AGENT_FILE"
