@@ -152,6 +152,30 @@ python /app/operator_cli.py upload /app/local-file.txt uploaded/remote-file.txt
 python /app/operator_cli.py download uploaded/remote-file.txt /tmp/hello-downloaded.txt
 ```
 
+### Forwarding demo (ops.forward)
+
+Expose the edge-local HTTP demo server (started by `start-edge-agent.sh`) to your host via the operator forward listener. The operator CLI listens locally and tunnels raw TCP to the edge agent's forward service.
+
+1. In the `operator-dashboard` container, start a forward listener that maps host `3000` -> edge `127.0.0.1:8080`:
+
+```bash
+# Inside operator-dashboard container
+python /app/operator_cli.py forward 127.0.0.1:8080 3000
+```
+
+By default the operator binds on `0.0.0.0:3000` so the mapped container port will be available on your host as `localhost:3000` when using the provided `docker-compose` mapping.
+
+2. From your host, test with curl:
+
+```bash
+curl -v http://localhost:3000/
+# You should see the demo page: "Hidden HMI: Access Granted!"
+```
+
+Notes:
+- The forwarding implementation uses a raw TCP tunnel for direct HTTP compatibility (no JSON header framing). Ensure both the edge agent and operator forward listener are running the updated code and that the agent's `OPS_FORWARD_DEFAULT_TARGET_HOST`/`PORT` (defaults: `127.0.0.1:8080`) point to the desired local service on the device.
+- If you changed the agent's default forward target, adjust the operator command accordingly.
+
 3. Notes:
 - The edge agent enforces a command allowlist. Adjust with `OPS_EXEC_ALLOWLIST` environment variable when starting the agent (comma-separated list).
 - The agent attempts to clean up its Ziti binding (terminator) on clean shutdown (SIGINT/SIGTERM). If you see orphaned terminators, stopping the agent with Ctrl+C should remove them.

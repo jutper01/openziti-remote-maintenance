@@ -35,7 +35,7 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 |---------|---------|--------|
 | `ops.exec` | Remote command execution with allowlist | ✅ MVP Complete |
 | `ops.files` | Secure bidirectional file transfer | ✅ MVP Complete |
-| `ops.forward` | Port forwarding to access local UIs | 🏋️‍♂️ In Progress |
+| `ops.forward` | Port forwarding to access local UIs | ✅ MVP (raw-TCP tunnel) |
 
 ## 💻 Technology Stack
 
@@ -72,6 +72,16 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 
 📖 **For detailed setup instructions, see [QUICKSTART.md](QUICKSTART.md)**
 
+## Demo / Forwarding
+
+- The project includes a small demonstration for `ops.forward` (raw-TCP tunnel). See `QUICKSTART.md` → "Forwarding demo (ops.forward)" for step-by-step instructions to run the operator forward listener and test with `curl`.
+- When started via `scripts/start-edge-agent.sh`, the edge agent creates a demo HTTP page served on `127.0.0.1:8080` so the forwarding demo has a predictable target.
+- Key environment variables:
+   - `OPS_FORWARD_DEFAULT_TARGET_HOST` / `OPS_FORWARD_DEFAULT_TARGET_PORT` — default target the agent forwards to (defaults: `127.0.0.1:8080`).
+   - `OPS_FORWARD_BIND_PORT` — local bind port inside the edge agent for the forward service.
+   - `OPS_FORWARD_ALLOWED_HOSTS` / `OPS_FORWARD_ALLOWED_PORTS` — agent-side allowlist for forwarding targets.
+   - `OPS_FORWARD_BIND_ADDR` (operator side) — control where the operator forward listener binds (default `0.0.0.0` in the CLI helper for demo convenience).
+
 ## 📁 Project Structure
 
 ```
@@ -98,7 +108,7 @@ A prototype demonstrating secure remote maintenance of industrial devices using 
 - [x] OpenZiti identities, service & router definitions
 - [x] Edge agent implementation (ops.exec MVP)
 - [x] Operator dashboard CLI implementation (exec command)
-- [ ] Additional services (ops.files, ops.forward)
+ - [x] Additional services (ops.files, ops.forward)
 - [ ] Operator dashboard UI enhancements
 - [ ] Security verification & benchmarking
 

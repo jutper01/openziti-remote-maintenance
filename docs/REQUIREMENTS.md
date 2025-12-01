@@ -51,6 +51,8 @@ Industrial service engineers need secure remote access to OT devices (PLCs, HMIs
    - Access device's local web UI (e.g., HMI on localhost:8080)
    - Connect to internal services without exposing them externally
    - Example: Forward localhost:3000 → device's localhost:8080
+   - Implementation notes (prototype): Implemented as a raw-TCP tunnel. The edge agent opens a local TCP connection to a configured default target (controlled via `OPS_FORWARD_DEFAULT_TARGET_HOST` and `OPS_FORWARD_DEFAULT_TARGET_PORT`) and relays bytes bidirectionally. The operator runs a local forward listener that accepts client connections and tunnels raw TCP into the `ops.forward` service.
+   - Security controls: The agent enforces `OPS_FORWARD_ALLOWED_HOSTS` and `OPS_FORWARD_ALLOWED_PORTS` allowlists to limit accessible targets. The controller still governs which identities may dial or bind the forward service.
 
 ### Workflow
 1. Operator authenticates with their OpenZiti identity
@@ -129,3 +131,8 @@ This prototype uses the Python SDK (`openziti`) for both the agent and the CLI.
 | Edge Agent | Python 3.12 slim | Lightweight, good SDK support |
 | Operator CLI | Python 3.12 slim | Simple CLI used for testing/demos |
 | Infrastructure | Docker Compose | Fast iteration, easy cleanup |
+
+## Operational notes
+
+- Reuse a single unpacked identity when creating multiple Ziti bindings in the same process. Re-initializing or reloading identities across bindings can trigger native SDK "invalid state" errors (observed as native error -22). Loading the identity once and reusing it for multiple bindings avoids this issue.
+- When updating forwarding code or switching protocols (JSON-header framing vs raw-TCP), ensure both agent and operator are updated and restarted so they use the same protocol. Mismatched protocols will result in parsing errors or broken connections.
