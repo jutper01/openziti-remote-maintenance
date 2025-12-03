@@ -101,7 +101,7 @@ fi
 # Start a background HTTP server on 127.0.0.1:8080 serving $WEBROOT
 # Use the active Python binary so the venv Python is used if available.
 (
-  cd "$WEBROOT" && "$PY_BIN" -m http.server 8080 > "$LOGDIR/http-server.log" 2>&1 &
+  cd "$WEBROOT" && "$PY_BIN" -m http.server 8080 --bind 127.0.0.1 > "$LOGDIR/http-server.log" 2>&1 &
 )
 echo "[edge-agent] ▶ started demo HTTP server at 127.0.0.1:8080 (logs: $LOGDIR/http-server.log)"
 
